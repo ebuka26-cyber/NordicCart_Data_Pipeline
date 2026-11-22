@@ -1,0 +1,175 @@
+table FactInventory
+	lineageTag: f7dd91f5-d7d4-561f-8408-f6f6b6d70136
+
+	/// Current units on hand.
+	measure 'Units On Hand' = SUM ( FactInventory[on_hand] )
+		formatString: #,0
+		displayFolder: Inventory
+		lineageTag: f2fdde35-c5c6-5b74-ba14-733d33d5298c
+
+	/// Units reserved for open orders.
+	measure 'Units Reserved' = SUM ( FactInventory[reserved] )
+		formatString: #,0
+		displayFolder: Inventory
+		lineageTag: f73fbd06-c077-5bbe-91f9-8017f9749db2
+
+	/// On hand - reserved.
+	measure 'Units Available' = SUM ( FactInventory[available] )
+		formatString: #,0
+		displayFolder: Inventory
+		lineageTag: 82d196a7-e301-5faf-8fb5-ea3d77e2dfb4
+
+	/// Location x SKU positions.
+	measure 'Stock Positions' = COUNTROWS ( FactInventory )
+		formatString: #,0
+		displayFolder: Inventory
+		lineageTag: 0e271d7f-cea2-51d3-a444-d7f5bf6f9563
+
+	/// Positions with available <= reorder point.
+	measure 'Low Stock Positions' = CALCULATE ( COUNTROWS ( FactInventory ), FactInventory[low_stock] = TRUE () )
+		formatString: #,0
+		displayFolder: Inventory
+		lineageTag: be211d38-14b7-506b-9b3c-a3f1c485cd34
+
+	/// Positions with nothing available.
+	measure 'Out of Stock Positions' = CALCULATE ( COUNTROWS ( FactInventory ), FactInventory[available] <= 0 )
+		formatString: #,0
+		displayFolder: Inventory
+		lineageTag: 296de811-f438-5a1c-95d6-bef9471dc893
+
+	/// Low-stock positions / positions.
+	measure 'Low Stock Rate' = DIVIDE ( [Low Stock Positions], [Stock Positions] )
+		formatString: 0.0%
+		displayFolder: Inventory
+		lineageTag: a9b45170-571a-5240-a108-a886e5ac835a
+
+	/// Distinct SKUs low somewhere.
+	measure 'SKUs with Low Stock' = CALCULATE ( DISTINCTCOUNT ( FactInventory[sku] ), FactInventory[low_stock] = TRUE () )
+		formatString: #,0
+		displayFolder: Inventory
+		lineageTag: 3264905f-4e09-5c13-919f-49e0c2dcea0c
+
+	/// Units available, low-stock positions only (blank otherwise).
+	measure 'Low Stock Available' = CALCULATE ( [Units Available], KEEPFILTERS ( FactInventory[low_stock] = TRUE () ) )
+		formatString: #,0
+		displayFolder: Inventory
+		lineageTag: f4d33f8e-98aa-5ce8-a283-8fe55d8c5cec
+
+	/// Reorder point, low-stock positions only.
+	measure 'Low Stock Reorder Point' = CALCULATE ( SUM ( FactInventory[reorder_point] ), KEEPFILTERS ( FactInventory[low_stock] = TRUE () ) )
+		formatString: #,0
+		displayFolder: Inventory
+		lineageTag: 7972cc3e-d2e2-5f6d-94e0-07471986c3d6
+
+	/// Units needed to bring low-stock positions back to their reorder point.
+	measure 'Reorder Shortfall Units' = SUMX ( FILTER ( FactInventory, FactInventory[low_stock] = TRUE () ), FactInventory[reorder_point] - FactInventory[available] )
+		formatString: #,0
+		displayFolder: Inventory
+		lineageTag: 56b95ec0-a68d-52c5-a141-63c9d8c9d057
+
+	column location_code
+		dataType: string
+		lineageTag: c4073f87-cf1b-59ef-bf70-831e087d0dbb
+		summarizeBy: none
+		sourceColumn: location_code
+
+		annotation SummarizationSetBy = Automatic
+
+	column location_type
+		dataType: string
+		lineageTag: 93654108-1ca6-5567-97c8-460cdb157fb3
+		summarizeBy: none
+		sourceColumn: location_type
+
+		annotation SummarizationSetBy = Automatic
+
+	column market
+		dataType: string
+		lineageTag: 91189c76-9aca-5316-ab4a-00fc3af63dd2
+		summarizeBy: none
+		sourceColumn: market
+
+		annotation SummarizationSetBy = Automatic
+
+	column sku
+		dataType: string
+		lineageTag: 040af202-a8ae-5a84-a724-683adecf560b
+		summarizeBy: none
+		sourceColumn: sku
+
+		annotation SummarizationSetBy = Automatic
+
+	column category
+		dataType: string
+		lineageTag: ff4b7cc7-d9ca-5268-9cc1-4e484e61c4d7
+		summarizeBy: none
+		sourceColumn: category
+
+		annotation SummarizationSetBy = Automatic
+
+	column on_hand
+		dataType: int64
+		formatString: #,0
+		lineageTag: d1c0fbc0-d7ff-5128-a6a1-1c05aa505ff0
+		summarizeBy: sum
+		sourceColumn: on_hand
+
+		annotation SummarizationSetBy = Automatic
+
+	column reserved
+		dataType: int64
+		formatString: #,0
+		lineageTag: 6e459882-3173-54be-ba34-682c7dc2fc8e
+		summarizeBy: sum
+		sourceColumn: reserved
+
+		annotation SummarizationSetBy = Automatic
+
+	column reorder_point
+		dataType: int64
+		formatString: #,0
+		lineageTag: b551672b-da67-538f-8d19-0879dff83fc5
+		summarizeBy: sum
+		sourceColumn: reorder_point
+
+		annotation SummarizationSetBy = Automatic
+
+	column available
+		dataType: int64
+		formatString: #,0
+		lineageTag: c26f9e72-cf0e-5e74-9adf-6dc61e826eb0
+		summarizeBy: sum
+		sourceColumn: available
+
+		annotation SummarizationSetBy = Automatic
+
+	column low_stock
+		dataType: boolean
+		lineageTag: c16b5ed9-7a9c-5252-95cf-4590584bc80d
+		summarizeBy: none
+		sourceColumn: low_stock
+
+		annotation SummarizationSetBy = Automatic
+
+	column stock_status
+		dataType: string
+		lineageTag: efc8dfd1-a015-5de7-a87e-d2e8dbed4f8f
+		summarizeBy: none
+		sourceColumn: stock_status
+
+		annotation SummarizationSetBy = Automatic
+
+	partition FactInventory = m
+		mode: import
+		source =
+			let
+			    Source = Csv.Document(File.Contents(AnalyticsFolder & "\inventory_current.csv"), [Delimiter = ",", Columns = 8, Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
+			    Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+			    Typed = Table.TransformColumnTypes(Promoted, {{"location_code", type text}, {"location_type", type text}, {"market", type text}, {"sku", type text}, {"category", type text}, {"on_hand", Int64.Type}, {"reserved", Int64.Type}, {"reorder_point", Int64.Type}}, "en-US"),
+			    Available = Table.AddColumn(Typed, "available", each [on_hand] - [reserved], Int64.Type),
+			    LowStock = Table.AddColumn(Available, "low_stock", each [available] <= [reorder_point], type logical),
+			    Result = Table.AddColumn(LowStock, "stock_status", each if [available] <= 0 then "Out of stock" else if [low_stock] then "Low stock" else "In stock", type text)
+			in
+			    Result
+
+	annotation PBI_ResultType = Table

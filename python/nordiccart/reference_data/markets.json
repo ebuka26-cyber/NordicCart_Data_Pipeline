@@ -1,0 +1,101 @@
+{
+  "_note": "Reference data for the four NordicCart markets. Facts (currencies, standard VAT rates, time zones) are real as of 2026; cities, streets and postal code ranges are plausible values for synthetic addresses. VAT: SE, NO, DK 25%; FI 25.5% since 2024-09-01.",
+  "currencies": [
+    {"currency_code": "SEK", "currency_name": "Swedish krona", "minor_units": 2},
+    {"currency_code": "NOK", "currency_name": "Norwegian krone", "minor_units": 2},
+    {"currency_code": "DKK", "currency_name": "Danish krone", "minor_units": 2},
+    {"currency_code": "EUR", "currency_name": "Euro", "minor_units": 2}
+  ],
+  "countries": [
+    {
+      "country_code": "SE",
+      "country_name": "Sweden",
+      "currency_code": "SEK",
+      "vat_rate": "0.2500",
+      "time_zone": "Europe/Stockholm",
+      "market_launched_on": "2018-03-15",
+      "postal_code_format": "NNN NN",
+      "phone": {"country_prefix": "+46", "mobile_prefixes": ["70", "72", "73", "76", "79"], "layout": "{prefix} {mobile} {d3} {d2} {d2}"},
+      "address_suffixes": ["", "", "", " A", " B", ", lgh 1001", ", lgh 1102", ", lgh 1203", ", lgh 1301"],
+      "streets": ["Storgatan", "Kungsgatan", "Drottninggatan", "Vasagatan", "Skolgatan", "Kyrkogatan", "Parkvägen", "Björkvägen", "Ekvägen", "Tallvägen", "Granvägen", "Lindvägen", "Sjövägen", "Industrigatan", "Järnvägsgatan", "Nygatan", "Östra Långgatan", "Västra vägen", "Södra Allén", "Norra Strandgatan"],
+      "cities": [
+        {"city": "Stockholm", "weight": 30, "postal_min": 11120, "postal_max": 11869},
+        {"city": "Göteborg", "weight": 16, "postal_min": 41101, "postal_max": 42679},
+        {"city": "Malmö", "weight": 11, "postal_min": 21111, "postal_max": 21875},
+        {"city": "Uppsala", "weight": 7, "postal_min": 75220, "postal_max": 75655},
+        {"city": "Västerås", "weight": 5, "postal_min": 72130, "postal_max": 72598},
+        {"city": "Örebro", "weight": 5, "postal_min": 70210, "postal_max": 70380},
+        {"city": "Linköping", "weight": 5, "postal_min": 58220, "postal_max": 58937},
+        {"city": "Helsingborg", "weight": 4, "postal_min": 25220, "postal_max": 25669},
+        {"city": "Jönköping", "weight": 4, "postal_min": 55302, "postal_max": 55627},
+        {"city": "Umeå", "weight": 4, "postal_min": 90320, "postal_max": 90750},
+        {"city": "Lund", "weight": 4, "postal_min": 22220, "postal_max": 22738}
+      ]
+    },
+    {
+      "country_code": "NO",
+      "country_name": "Norway",
+      "currency_code": "NOK",
+      "vat_rate": "0.2500",
+      "time_zone": "Europe/Oslo",
+      "market_launched_on": "2019-03-01",
+      "postal_code_format": "NNNN",
+      "phone": {"country_prefix": "+47", "mobile_prefixes": ["40", "41", "45", "46", "47", "48", "90", "91", "92", "93", "95", "97", "98", "99"], "layout": "{prefix} {mobile}{d1} {d2} {d3}"},
+      "address_suffixes": ["", "", "", "A", "B", "C"],
+      "streets": ["Storgata", "Kirkegata", "Skolegata", "Parkveien", "Bjørkeveien", "Granveien", "Furuveien", "Kongens gate", "Dronningens gate", "Strandveien", "Sjøgata", "Industriveien", "Stasjonsveien", "Bakkeveien", "Solveien", "Fjordveien", "Torggata", "Elvegata", "Nygata", "Lia"],
+      "cities": [
+        {"city": "Oslo", "weight": 35, "postal_min": 150, "postal_max": 1295},
+        {"city": "Bergen", "weight": 14, "postal_min": 5003, "postal_max": 5268},
+        {"city": "Trondheim", "weight": 11, "postal_min": 7010, "postal_max": 7099},
+        {"city": "Stavanger", "weight": 9, "postal_min": 4005, "postal_max": 4099},
+        {"city": "Drammen", "weight": 5, "postal_min": 3001, "postal_max": 3048},
+        {"city": "Kristiansand", "weight": 5, "postal_min": 4608, "postal_max": 4639},
+        {"city": "Tromsø", "weight": 4, "postal_min": 9006, "postal_max": 9038},
+        {"city": "Fredrikstad", "weight": 4, "postal_min": 1601, "postal_max": 1640}
+      ]
+    },
+    {
+      "country_code": "DK",
+      "country_name": "Denmark",
+      "currency_code": "DKK",
+      "vat_rate": "0.2500",
+      "time_zone": "Europe/Copenhagen",
+      "market_launched_on": "2019-09-14",
+      "postal_code_format": "NNNN",
+      "phone": {"country_prefix": "+45", "mobile_prefixes": ["20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "40", "41", "42", "50", "51", "52", "53", "60", "61"], "layout": "{prefix} {mobile} {d2} {d2} {d2}"},
+      "address_suffixes": ["", "", ", st. tv.", ", 1. th.", ", 2. tv.", ", 3. th.", ", 4. mf."],
+      "streets": ["Østergade", "Vestergade", "Nørregade", "Søndergade", "Algade", "Kirkevej", "Skolevej", "Parkvej", "Birkevej", "Egevej", "Bøgevej", "Strandvejen", "Stationsvej", "Møllevej", "Engvej", "Havnegade", "Bakkevej", "Rosenvænget", "Nygade", "Skovvej"],
+      "cities": [
+        {"city": "København", "weight": 35, "postal_min": 1050, "postal_max": 2450},
+        {"city": "Aarhus", "weight": 15, "postal_min": 8000, "postal_max": 8270},
+        {"city": "Odense", "weight": 10, "postal_min": 5000, "postal_max": 5270},
+        {"city": "Aalborg", "weight": 9, "postal_min": 9000, "postal_max": 9220},
+        {"city": "Esbjerg", "weight": 5, "postal_min": 6700, "postal_max": 6715},
+        {"city": "Randers", "weight": 4, "postal_min": 8900, "postal_max": 8960},
+        {"city": "Kolding", "weight": 4, "postal_min": 6000, "postal_max": 6070},
+        {"city": "Vejle", "weight": 4, "postal_min": 7100, "postal_max": 7120}
+      ]
+    },
+    {
+      "country_code": "FI",
+      "country_name": "Finland",
+      "currency_code": "EUR",
+      "vat_rate": "0.2550",
+      "time_zone": "Europe/Helsinki",
+      "market_launched_on": "2020-03-07",
+      "postal_code_format": "NNNNN",
+      "phone": {"country_prefix": "+358", "mobile_prefixes": ["40", "41", "44", "45", "46", "50"], "layout": "{prefix} {mobile} {d3} {d4}"},
+      "address_suffixes": ["", "", " A 5", " B 12", " C 21", " A 2", " B 7"],
+      "streets": ["Mannerheimintie", "Hämeenkatu", "Kauppakatu", "Koulukatu", "Puistokatu", "Rantakatu", "Kirkkokatu", "Asemakatu", "Koivukuja", "Mäntytie", "Kuusitie", "Pihlajatie", "Rantatie", "Teollisuuskatu", "Aleksanterinkatu", "Satamakatu", "Linnankatu", "Torikatu", "Myllytie", "Uusikatu"],
+      "cities": [
+        {"city": "Helsinki", "weight": 35, "postal_min": 100, "postal_max": 990},
+        {"city": "Espoo", "weight": 15, "postal_min": 2100, "postal_max": 2980},
+        {"city": "Tampere", "weight": 13, "postal_min": 33100, "postal_max": 33960},
+        {"city": "Vantaa", "weight": 10, "postal_min": 1200, "postal_max": 1770},
+        {"city": "Turku", "weight": 10, "postal_min": 20100, "postal_max": 20960},
+        {"city": "Oulu", "weight": 8, "postal_min": 90100, "postal_max": 90940},
+        {"city": "Jyväskylä", "weight": 6, "postal_min": 40100, "postal_max": 40950}
+      ]
+    }
+  ]
+}

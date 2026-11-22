@@ -1,0 +1,27 @@
+relationship 17037844-8819-56c3-be21-10bdd6735b97
+	fromColumn: FactSales.fulfilment_date_local
+	toColumn: DimDate.Date
+
+relationship fc834a59-8ac2-5400-ac9f-3c70e162fd78
+	fromColumn: FactOrdersMonthly.month_start
+	toColumn: DimDate.Date
+
+relationship c3919581-5407-5a0f-9b07-bff35b4accee
+	fromColumn: FactSales.market
+	toColumn: DimCountry.country_code
+
+relationship 4ce036c1-a2a7-5c74-a320-2b9445250203
+	fromColumn: FactOrdersMonthly.market
+	toColumn: DimCountry.country_code
+
+relationship ee7108e9-e7d2-5040-bf5e-304ac9f0edbf
+	fromColumn: FactInventory.market
+	toColumn: DimCountry.country_code
+
+relationship 4b37c3b3-eec5-5f84-9a58-0eea8ca3cb2d
+	fromColumn: FactSales.channel
+	toColumn: DimChannel.channel_code
+
+relationship aadef8ab-37d3-5eb2-9222-d14151676328
+	fromColumn: FactOrdersMonthly.channel
+	toColumn: DimChannel.channel_code

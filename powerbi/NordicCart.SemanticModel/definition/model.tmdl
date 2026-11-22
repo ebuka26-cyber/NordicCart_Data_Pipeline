@@ -1,0 +1,20 @@
+model Model
+	culture: en-US
+	defaultPowerBIDataSourceVersion: powerBI_V3
+	discourageImplicitMeasures
+	sourceQueryCulture: en-US
+	dataAccessOptions
+		legacyRedirects
+		returnErrorValuesAsNull
+
+annotation PBI_QueryOrder = ["AnalyticsFolder", "FactSales", "FactOrdersMonthly", "FactInventory", "DimCountry", "DimChannel", "DataFreshness"]
+
+annotation __PBI_TimeIntelligenceEnabled = 0
+
+ref table FactSales
+ref table FactOrdersMonthly
+ref table FactInventory
+ref table DimCountry
+ref table DimChannel
+ref table DataFreshness
+ref table DimDate

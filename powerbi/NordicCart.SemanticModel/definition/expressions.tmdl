@@ -1,0 +1,4 @@
+expression AnalyticsFolder = "C:\NordicCart_Data_Pipeline\output\etl\analytics" meta [IsParameterQuery = true, Type = "Text", IsParameterQueryRequired = true]
+	lineageTag: f8557d99-7671-5511-aaaf-768a00ab5b27
+
+	annotation PBI_ResultType = Text

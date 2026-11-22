@@ -1,0 +1,216 @@
+table FactSales
+	lineageTag: e31a81f1-c896-5488-84d7-7c149f8f9c39
+
+	/// Fulfilled-order revenue incl. VAT, converted at the fulfilment-date EUR rate (ETL).
+	measure 'Gross Revenue EUR' = SUM ( FactSales[revenue_gross_eur] )
+		formatString: €#,0
+		displayFolder: Sales
+		lineageTag: 977d1256-8625-503c-8064-aad184873eee
+
+	/// Revenue excl. VAT, EUR.
+	measure 'Net Revenue EUR' = SUM ( FactSales[revenue_net_eur] )
+		formatString: €#,0
+		displayFolder: Sales
+		lineageTag: 097ce6a2-c5d2-57a7-a15a-f467348dcf2f
+
+	/// VAT, EUR.
+	measure 'VAT EUR' = [Gross Revenue EUR] - [Net Revenue EUR]
+		formatString: €#,0
+		displayFolder: Sales
+		lineageTag: 1498e887-6517-5547-a57e-393e48dde42e
+
+	/// Orders fulfilled, by local fulfilment date.
+	measure 'Fulfilled Orders' = SUM ( FactSales[orders] )
+		formatString: #,0
+		displayFolder: Sales
+		lineageTag: af4ef77d-8636-56da-9e9b-5834fa83bcb5
+
+	/// Lines of fulfilled orders.
+	measure 'Order Lines' = SUM ( FactSales[order_lines] )
+		formatString: #,0
+		displayFolder: Sales
+		lineageTag: d545abca-47a0-5fa0-8c2a-72a42c0cb612
+
+	/// Units of fulfilled orders.
+	measure 'Units Sold' = SUM ( FactSales[units] )
+		formatString: #,0
+		displayFolder: Sales
+		lineageTag: 4711c0f4-b186-5cb2-9b2f-e6ad81869730
+
+	/// Gross revenue per fulfilled order, EUR.
+	measure 'Average Order Value EUR' = DIVIDE ( [Gross Revenue EUR], [Fulfilled Orders] )
+		formatString: €#,0.00
+		displayFolder: Sales
+		lineageTag: b487310f-ba46-519c-98ec-467692530b6f
+
+	/// Units per fulfilled order.
+	measure 'Units per Order' = DIVIDE ( [Units Sold], [Fulfilled Orders] )
+		formatString: 0.00
+		displayFolder: Sales
+		lineageTag: 31948f04-ea71-5e13-a78d-8ed46d3d8804
+
+	/// Gross revenue in local currency; blank when several currencies are in context.
+	measure 'Gross Revenue Local' = IF ( HASONEVALUE ( FactSales[currency] ), SUM ( FactSales[revenue_gross_local] ) )
+		formatString: #,0
+		displayFolder: Sales
+		lineageTag: 22af8054-2712-5d15-8176-6666475ec53b
+
+	/// Share of all countries and channels in the selected period.
+	measure 'Share of Gross Revenue' = DIVIDE ( [Gross Revenue EUR], CALCULATE ( [Gross Revenue EUR], ALL ( DimCountry ), ALL ( DimChannel ) ) )
+		formatString: 0.0%
+		displayFolder: Sales
+		lineageTag: 9d6f5616-8d7f-5156-88cb-0f0c08050655
+
+	/// Gross revenue one year earlier, over the selected dates up to the last fulfilment date (like for like).
+	measure 'Gross Revenue EUR PY' = VAR _last = CALCULATE ( MAX ( FactSales[fulfilment_date_local] ), REMOVEFILTERS () ) VAR _dates = CALCULATETABLE ( VALUES ( DimDate[Date] ), KEEPFILTERS ( DimDate[Date] <= _last ) ) RETURN CALCULATE ( [Gross Revenue EUR], SAMEPERIODLASTYEAR ( _dates ) )
+		formatString: €#,0
+		displayFolder: Sales
+		lineageTag: fecfd718-4fe4-5d85-94ef-c671fd40013c
+
+	/// Year-over-year change; blank when the prior-year period starts before the data (Nov 2024).
+	measure 'Gross Revenue YoY %' = VAR _first = CALCULATE ( MIN ( FactSales[fulfilment_date_local] ), REMOVEFILTERS () ) VAR _last = CALCULATE ( MAX ( FactSales[fulfilment_date_local] ), REMOVEFILTERS () ) VAR _dates = CALCULATETABLE ( VALUES ( DimDate[Date] ), KEEPFILTERS ( DimDate[Date] <= _last ) ) VAR _pyStart = MINX ( SAMEPERIODLASTYEAR ( _dates ), DimDate[Date] ) VAR _py = [Gross Revenue EUR PY] RETURN IF ( _pyStart >= _first && NOT ISBLANK ( _py ), DIVIDE ( [Gross Revenue EUR] - _py, _py ) )
+		formatString: 0.0%
+		displayFolder: Sales
+		lineageTag: 4804ebe8-2d0f-5213-8857-ac9d9d630701
+
+	/// Fulfilled orders that had no EUR rate (expected 0).
+	measure 'Orders Without EUR Rate' = SUM ( FactSales[orders_without_eur_rate] )
+		formatString: #,0
+		displayFolder: Sales
+		lineageTag: f98d4368-0b4f-5563-8119-0580489330cc
+
+	column fulfilment_date_local
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		lineageTag: 1b4b83a4-3771-57df-af9b-b71c3616d50b
+		summarizeBy: none
+		sourceColumn: fulfilment_date_local
+
+		annotation SummarizationSetBy = Automatic
+
+	column market
+		dataType: string
+		lineageTag: 1d6b9c5c-8337-5bb1-a578-dad6a864a9da
+		summarizeBy: none
+		sourceColumn: market
+
+		annotation SummarizationSetBy = Automatic
+
+	column channel
+		dataType: string
+		lineageTag: f7f5acdd-3832-5cc3-993d-f6f15e38f435
+		summarizeBy: none
+		sourceColumn: channel
+
+		annotation SummarizationSetBy = Automatic
+
+	column currency
+		dataType: string
+		lineageTag: 4a0f6b3a-6715-5bee-9c89-8639b2bcfd01
+		summarizeBy: none
+		sourceColumn: currency
+
+		annotation SummarizationSetBy = Automatic
+
+	column orders
+		dataType: int64
+		formatString: #,0
+		isHidden
+		lineageTag: a35f6db3-6725-52b3-89c5-bc08b191a952
+		summarizeBy: sum
+		sourceColumn: orders
+
+		annotation SummarizationSetBy = Automatic
+
+	column order_lines
+		dataType: int64
+		formatString: #,0
+		isHidden
+		lineageTag: 166bdeaa-dec8-56f3-8810-660d2ba48e67
+		summarizeBy: sum
+		sourceColumn: order_lines
+
+		annotation SummarizationSetBy = Automatic
+
+	column units
+		dataType: int64
+		formatString: #,0
+		isHidden
+		lineageTag: 226c891e-8ce5-5940-96fd-36d4dad23925
+		summarizeBy: sum
+		sourceColumn: units
+
+		annotation SummarizationSetBy = Automatic
+
+	column revenue_gross_local
+		dataType: decimal
+		formatString: #,0.00
+		isHidden
+		lineageTag: c92c77e0-1ebb-587d-b92f-a0f50bc071ca
+		summarizeBy: sum
+		sourceColumn: revenue_gross_local
+
+		annotation SummarizationSetBy = Automatic
+
+	column vat_local
+		dataType: decimal
+		formatString: #,0.00
+		isHidden
+		lineageTag: cffb10ce-2a36-5d8f-ad39-3feec85fdeb4
+		summarizeBy: sum
+		sourceColumn: vat_local
+
+		annotation SummarizationSetBy = Automatic
+
+	column revenue_net_local
+		dataType: decimal
+		formatString: #,0.00
+		isHidden
+		lineageTag: 49c35af3-78d0-5158-8349-7702d17e0a5d
+		summarizeBy: sum
+		sourceColumn: revenue_net_local
+
+		annotation SummarizationSetBy = Automatic
+
+	column revenue_gross_eur
+		dataType: decimal
+		formatString: #,0.00
+		isHidden
+		lineageTag: ccbf533a-1f87-5fb4-be26-dbadbb4bab4a
+		summarizeBy: sum
+		sourceColumn: revenue_gross_eur
+
+		annotation SummarizationSetBy = Automatic
+
+	column revenue_net_eur
+		dataType: decimal
+		formatString: #,0.00
+		isHidden
+		lineageTag: a951256c-9253-58a1-b76c-30af7ca77cf9
+		summarizeBy: sum
+		sourceColumn: revenue_net_eur
+
+		annotation SummarizationSetBy = Automatic
+
+	column orders_without_eur_rate
+		dataType: int64
+		formatString: #,0
+		isHidden
+		lineageTag: 3fde6134-83cf-562b-961c-08963aa1d680
+		summarizeBy: sum
+		sourceColumn: orders_without_eur_rate
+
+		annotation SummarizationSetBy = Automatic
+
+	partition FactSales = m
+		mode: import
+		source =
+			let
+			    Source = Csv.Document(File.Contents(AnalyticsFolder & "\fact_sales_daily.csv"), [Delimiter = ",", Columns = 13, Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
+			    Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+			    Typed = Table.TransformColumnTypes(Promoted, {{"fulfilment_date_local", type date}, {"market", type text}, {"channel", type text}, {"currency", type text}, {"orders", Int64.Type}, {"order_lines", Int64.Type}, {"units", Int64.Type}, {"revenue_gross_local", Currency.Type}, {"vat_local", Currency.Type}, {"revenue_net_local", Currency.Type}, {"revenue_gross_eur", Currency.Type}, {"revenue_net_eur", Currency.Type}, {"orders_without_eur_rate", Int64.Type}}, "en-US"),
+			    Result = Typed
+			in
+			    Result
+
+	annotation PBI_ResultType = Table

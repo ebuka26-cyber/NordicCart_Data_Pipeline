@@ -1,0 +1,37 @@
+table DimCountry
+	lineageTag: 113d24a0-370c-5aa5-8f02-289bf551bd6b
+
+	column country_code
+		dataType: string
+		lineageTag: 3dce326e-c507-5216-b663-9dc7ea153d53
+		summarizeBy: none
+		sourceColumn: country_code
+
+		annotation SummarizationSetBy = Automatic
+
+	column Country
+		dataType: string
+		lineageTag: 36f11ca2-51bc-50ab-8dea-b770887e6195
+		summarizeBy: none
+		sourceColumn: Country
+
+		annotation SummarizationSetBy = Automatic
+
+	column Currency
+		dataType: string
+		lineageTag: 133202c2-e633-546c-b662-67bf4b5a9f9b
+		summarizeBy: none
+		sourceColumn: Currency
+
+		annotation SummarizationSetBy = Automatic
+
+	partition DimCountry = m
+		mode: import
+		source =
+			let
+			    Result = #table(type table [country_code = text, Country = text, Currency = text],
+			        {{"DK", "Denmark", "DKK"}, {"FI", "Finland", "EUR"}, {"NO", "Norway", "NOK"}, {"SE", "Sweden", "SEK"}})
+			in
+			    Result
+
+	annotation PBI_ResultType = Table

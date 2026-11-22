@@ -1,0 +1,43 @@
+# Secrets and local settings
+.env
+config/.env
+*.local.ini
+# copies of connection settings and password files (never commit; the template stays tracked)
+*.env
+.env.*
+!.env.example
+pgpass.conf
+.pgpass
+
+# Database backups, dumps and role exports: complete data, never committed
+database/backups/
+*.dump
+*.backup
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Logs and scratch output
+*.log
+logs/
+output/
+tmp/
+
+# Local assistant state and review copies (the canonical reports are in docs/; only README.md is kept at the root)
+.claude/
+Claude outputs/
+/*.md
+!/README.md
+
+# Editors and operating systems (the shared Run configurations in .vscode/launch.json are kept)
+.vscode/*
+!.vscode/launch.json
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

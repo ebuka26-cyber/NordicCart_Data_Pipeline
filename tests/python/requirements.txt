@@ -1,0 +1,2 @@
+# Same packages as python/requirements.txt (psycopg 3, tzdata, pytest).
+-r ../../python/requirements.txt

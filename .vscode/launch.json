@@ -1,0 +1,105 @@
+
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "NordicCart - Check Data",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/python/run_master_data_seed.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "args": ["--plan"]
+    },
+    {
+      "name": "NordicCart - Load Data",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/python/run_master_data_seed.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "args": ["--apply"]
+    },
+    {
+      "name": "NordicCart - Opening Inventory: Check",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/python/run_opening_inventory.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "args": ["--plan"]
+    },
+    {
+      "name": "NordicCart - Opening Inventory: Load",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/python/run_opening_inventory.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "args": ["--apply"]
+    },
+    {
+      "name": "NordicCart - Transactions: Dry Run",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/python/run_transactions.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "args": []
+    },
+    {
+      "name": "NordicCart - Transactions: Check",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/python/run_transactions.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "args": ["--plan"]
+    },
+    {
+      "name": "NordicCart - Transactions: Load",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/python/run_transactions.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "args": ["--apply"]
+    },
+    {
+      "name": "NordicCart - Replenishment: Dry Run",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/python/run_replenishment.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "args": []
+    },
+    {
+      "name": "NordicCart - Replenishment: Check",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/python/run_replenishment.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "args": ["--plan"]
+    },
+    {
+      "name": "NordicCart - Replenishment: Load",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/python/run_replenishment.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "args": ["--apply"]
+    },
+    {
+      "name": "NordicCart - Demand: Calibration (no database)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/python/run_demand_calibration.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "args": []
+    }
+  ]
+}

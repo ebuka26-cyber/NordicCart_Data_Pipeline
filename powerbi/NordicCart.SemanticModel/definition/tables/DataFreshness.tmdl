@@ -1,0 +1,37 @@
+table DataFreshness
+	lineageTag: 95a5ddf4-f692-57da-84d0-25ce24e99566
+
+	/// Latest publication time of the analytics files (file modification time, local time of the refreshing machine).
+	measure 'Data As Of' = MAX ( DataFreshness[published_local] )
+		formatString: yyyy-mm-dd hh:nn
+		displayFolder: Status
+		lineageTag: 34349621-bafc-59c9-8d97-317b069f1953
+
+	column file
+		dataType: string
+		lineageTag: 9683c36a-511b-5b6d-889c-bd6da3b770bf
+		summarizeBy: none
+		sourceColumn: file
+
+		annotation SummarizationSetBy = Automatic
+
+	column published_local
+		dataType: dateTime
+		formatString: yyyy-mm-dd hh:nn
+		lineageTag: 9872151d-adef-5f25-a72f-8f64e72a656b
+		summarizeBy: none
+		sourceColumn: published_local
+
+		annotation SummarizationSetBy = Automatic
+
+	partition DataFreshness = m
+		mode: import
+		source =
+			let
+			    Files = Folder.Files(AnalyticsFolder),
+			    Published = Table.SelectRows(Files, each List.Contains({"fact_sales_daily.csv", "orders_monthly.csv", "inventory_current.csv"}, [Name])),
+			    Result = Table.TransformColumnTypes(Table.RenameColumns(Table.SelectColumns(Published, {"Name", "Date modified"}), {{"Name", "file"}, {"Date modified", "published_local"}}), {{"published_local", type datetime}})
+			in
+			    Result
+
+	annotation PBI_ResultType = Table

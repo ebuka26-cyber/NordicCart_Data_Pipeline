@@ -1,0 +1,23 @@
+{
+  "_note": "The fixed NordicCart network: 12 stores and 4 warehouses (one per country, each ships online orders). Addresses are synthetic. location_code follows the DBML example (SE-STO-01, SE-WH-01). Every market opens its warehouse before its online launch (market_launched_on in markets.json) and its stores on or after it.",
+  "warehouses": [
+    {"location_code": "SE-WH-01", "location_name": "NordicCart Warehouse Jönköping", "country_code": "SE", "address_line1": "Logistikvägen 12", "postal_code": "556 52", "city": "Jönköping", "opened_on": "2018-01-15", "ships_online_orders": true, "storage_capacity_units": 120000},
+    {"location_code": "NO-WH-01", "location_name": "NordicCart Warehouse Jessheim", "country_code": "NO", "address_line1": "Industriveien 8", "postal_code": "2069", "city": "Jessheim", "opened_on": "2019-01-14", "ships_online_orders": true, "storage_capacity_units": 60000},
+    {"location_code": "DK-WH-01", "location_name": "NordicCart Warehouse Fredericia", "country_code": "DK", "address_line1": "Industrivej 25", "postal_code": "7000", "city": "Fredericia", "opened_on": "2019-06-03", "ships_online_orders": true, "storage_capacity_units": 60000},
+    {"location_code": "FI-WH-01", "location_name": "NordicCart Warehouse Vantaa", "country_code": "FI", "address_line1": "Teollisuustie 14", "postal_code": "01530", "city": "Vantaa", "opened_on": "2019-11-04", "ships_online_orders": true, "storage_capacity_units": 50000}
+  ],
+  "stores": [
+    {"location_code": "SE-STO-01", "location_name": "NordicCart Stockholm City", "country_code": "SE", "address_line1": "Drottninggatan 53", "postal_code": "111 21", "city": "Stockholm", "opened_on": "2018-03-15", "store_format": "flagship"},
+    {"location_code": "SE-STO-02", "location_name": "NordicCart Göteborg Centrum", "country_code": "SE", "address_line1": "Kungsgatan 31", "postal_code": "411 19", "city": "Göteborg", "opened_on": "2018-09-01", "store_format": "standard"},
+    {"location_code": "SE-STO-03", "location_name": "NordicCart Malmö Triangeln", "country_code": "SE", "address_line1": "Södra Förstadsgatan 41", "postal_code": "211 43", "city": "Malmö", "opened_on": "2019-04-06", "store_format": "standard"},
+    {"location_code": "SE-STO-04", "location_name": "NordicCart Uppsala", "country_code": "SE", "address_line1": "Kungsgatan 44", "postal_code": "753 21", "city": "Uppsala", "opened_on": "2021-10-02", "store_format": "standard"},
+    {"location_code": "NO-STO-01", "location_name": "NordicCart Oslo Karl Johan", "country_code": "NO", "address_line1": "Karl Johans gate 22", "postal_code": "0159", "city": "Oslo", "opened_on": "2019-03-01", "store_format": "flagship"},
+    {"location_code": "NO-STO-02", "location_name": "NordicCart Bergen Sentrum", "country_code": "NO", "address_line1": "Strandgaten 18", "postal_code": "5013", "city": "Bergen", "opened_on": "2020-05-16", "store_format": "standard"},
+    {"location_code": "NO-STO-03", "location_name": "NordicCart Trondheim", "country_code": "NO", "address_line1": "Olav Tryggvasons gate 30", "postal_code": "7011", "city": "Trondheim", "opened_on": "2022-09-03", "store_format": "standard"},
+    {"location_code": "DK-STO-01", "location_name": "NordicCart København Strøget", "country_code": "DK", "address_line1": "Østergade 26", "postal_code": "1100", "city": "København", "opened_on": "2019-09-14", "store_format": "flagship"},
+    {"location_code": "DK-STO-02", "location_name": "NordicCart Aarhus C", "country_code": "DK", "address_line1": "Søndergade 43", "postal_code": "8000", "city": "Aarhus", "opened_on": "2020-10-03", "store_format": "standard"},
+    {"location_code": "DK-STO-03", "location_name": "NordicCart Odense C", "country_code": "DK", "address_line1": "Vestergade 60", "postal_code": "5000", "city": "Odense", "opened_on": "2023-03-04", "store_format": "standard"},
+    {"location_code": "FI-STO-01", "location_name": "NordicCart Helsinki Keskusta", "country_code": "FI", "address_line1": "Aleksanterinkatu 21", "postal_code": "00100", "city": "Helsinki", "opened_on": "2020-03-07", "store_format": "flagship"},
+    {"location_code": "FI-STO-02", "location_name": "NordicCart Tampere", "country_code": "FI", "address_line1": "Hämeenkatu 19", "postal_code": "33200", "city": "Tampere", "opened_on": "2023-09-09", "store_format": "standard"}
+  ]
+}

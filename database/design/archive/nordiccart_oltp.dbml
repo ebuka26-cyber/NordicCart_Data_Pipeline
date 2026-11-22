@@ -1,0 +1,802 @@
+Project NordicCart {
+  database_type: 'PostgreSQL'
+  Note: '''
+# NordicCart operational database (OLTP source)
+Omnichannel consumer electronics retailer in Sweden, Norway, Denmark and Finland.
+Source system only: no raw, staging or analytical warehouse tables.
+
+## Conventions
+- Surrogate keys are bigint identity values that are never reused. Business keys (sku, customer_number, order_number, return_number, location_code) are unique and stable.
+- All timestamps are timestamptz stored in UTC. Business event times (placed_at, occurred_at, attempted_at, ...) are kept separate from system times (created_at, updated_at), so backfilled history and late data extract correctly.
+- Money is numeric in the local transaction currency. Every amount on an order and on its child records (order_items, payment_attempts, returns, return_items, refunds) is in orders.currency_code. Amounts are never converted or overwritten in place; conversion to EUR uses exchange_rates downstream.
+- Consumer prices include VAT. Unit costs exclude VAT.
+
+## Change tracking for incremental extraction
+1. Mutable tables carry created_at and updated_at (updated_at maintained by a BEFORE UPDATE trigger).
+2. Insert-only tables (exchange_rates, inventory_movements, change_log) carry created_at only and are extracted by their id.
+3. Business records are never hard-deleted: they change status or receive compensating rows. Master data is deactivated with is_active.
+4. Every operational table has an AFTER INSERT OR UPDATE OR DELETE row trigger that writes to change_log in the same transaction, so updates and any hard delete are captured reliably.
+5. The extractor reads change_log by change_id above its last watermark, re-reads a short overlap window, and merges idempotently on (table_name, record_key).
+'''
+}
+
+// =====================================================================
+// Enums
+// =====================================================================
+
+Enum stock_location_type {
+  store
+  warehouse
+}
+
+Enum sales_channel {
+  online
+  in_store
+}
+
+Enum order_status {
+  placed [note: 'Order captured, stock not yet reserved']
+  stock_reserved [note: 'All lines reserved at the fulfilment location, awaiting a successful payment']
+  confirmed [note: 'Payment captured']
+  fulfilled [note: 'Stock issued: picked and packed (online) or handed over (in store)']
+  payment_failed [note: 'Terminal: final payment attempt failed, reservations released']
+  cancelled [note: 'Terminal: out of stock, reservation expired or customer request']
+}
+
+Enum reservation_status {
+  active
+  consumed [note: 'Converted into a sale movement at fulfilment']
+  released [note: 'Released after cancellation or payment failure']
+  expired [note: 'Released automatically after expires_at']
+}
+
+Enum movement_type {
+  opening_balance [note: '+ initial stock at the start of the history']
+  purchase_receipt [note: '+ goods received from a supplier']
+  transfer_out [note: '- goods sent to another stock location']
+  transfer_in [note: '+ goods received from another stock location']
+  sale [note: '- goods issued for an order line at fulfilment']
+  return_restock [note: '+ resellable returned goods put back into stock']
+  stock_adjustment [note: '+/- stock count correction']
+  write_off [note: '- damaged, lost or obsolete stock']
+}
+
+Enum payment_method {
+  card
+  mobile_payment [note: 'Swish, Vipps MobilePay']
+  buy_now_pay_later [note: 'Invoice or instalments']
+  cash [note: 'In-store orders only']
+}
+
+Enum payment_status {
+  pending
+  authorized
+  captured
+  failed
+  voided
+}
+
+Enum shipment_status {
+  label_created
+  dispatched
+  in_transit
+  delivered
+  delivery_failed
+}
+
+Enum return_status {
+  requested
+  received
+  completed
+  rejected
+}
+
+Enum return_reason {
+  defective
+  damaged_in_transit
+  wrong_item
+  not_as_described
+  changed_mind
+  other
+}
+
+Enum item_condition {
+  resellable
+  damaged
+}
+
+Enum refund_status {
+  pending
+  succeeded
+  failed
+}
+
+Enum refund_reason {
+  "return"
+  order_cancellation
+  goodwill
+}
+
+Enum change_operation {
+  "insert"
+  "update"
+  "delete"
+}
+
+// =====================================================================
+// Reference data and currency
+// =====================================================================
+
+Table currencies {
+  currency_code char(3) [pk, note: 'ISO 4217: SEK, NOK, DKK, EUR']
+  currency_name varchar(50) [not null]
+  minor_units smallint [not null, default: 2]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+}
+
+Table countries {
+  country_code char(2) [pk, note: 'ISO 3166-1 alpha-2: SE, NO, DK, FI']
+  country_name varchar(100) [not null, unique]
+  currency_code char(3) [not null, note: 'Current local currency. Transactions keep their own currency_code, so history survives a currency change.']
+  vat_rate numeric(5,4) [not null, note: 'Current standard VAT rate, e.g. 0.2500. Order lines snapshot the rate actually used.']
+  time_zone varchar(64) [not null, note: 'IANA zone, e.g. Europe/Stockholm, for local-time reporting']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  checks {
+    `vat_rate >= 0 AND vat_rate < 1` [name: 'ck_countries_vat_rate']
+  }
+}
+
+Table exchange_rates {
+  exchange_rate_id bigint [pk, increment]
+  rate_date date [not null]
+  base_currency_code char(3) [not null, default: 'EUR']
+  quote_currency_code char(3) [not null]
+  rate numeric(18,8) [not null, note: 'Units of quote currency per 1 unit of base currency']
+  source varchar(50) [not null, default: 'synthetic_ecb']
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (base_currency_code, quote_currency_code, rate_date) [unique, name: 'uq_exchange_rates_pair_date']
+  }
+
+  checks {
+    `rate > 0` [name: 'ck_exchange_rates_rate_positive']
+    `base_currency_code <> quote_currency_code` [name: 'ck_exchange_rates_distinct_pair']
+  }
+
+  Note: '''
+Insert-only daily history: one row per currency pair per calendar day (EUR base, ECB style).
+Rates are never updated, so any historical conversion is reproducible.
+Convert a local amount to EUR with the rate whose rate_date equals the transaction date: amount_eur = amount / rate. EUR amounts need no conversion.
+'''
+}
+
+// =====================================================================
+// Customers, catalogue and promotions
+// =====================================================================
+
+Table customers {
+  customer_id bigint [pk, increment]
+  customer_number varchar(20) [not null, unique, note: 'Stable business key, e.g. C00012345']
+  first_name varchar(100) [not null]
+  last_name varchar(100) [not null]
+  email varchar(255) [not null, unique]
+  phone varchar(30)
+  birth_date date
+  address_line1 varchar(200)
+  postal_code varchar(10)
+  city varchar(100)
+  country_code char(2) [not null]
+  signup_channel sales_channel [not null]
+  registered_at timestamptz [not null]
+  is_active boolean [not null, default: true, note: 'Deactivation instead of hard delete']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    country_code [name: 'ix_customers_country_code']
+    updated_at [name: 'ix_customers_updated_at']
+  }
+}
+
+Table product_categories {
+  category_id bigint [pk, increment]
+  category_code varchar(30) [not null, unique, note: 'e.g. LAPTOPS, TV_AUDIO']
+  category_name varchar(100) [not null, unique]
+  is_active boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+}
+
+Table products {
+  product_id bigint [pk, increment]
+  sku varchar(32) [not null, unique, note: 'Stable business key']
+  product_name varchar(200) [not null]
+  brand varchar(100) [not null]
+  category_id bigint [not null]
+  launched_on date
+  discontinued_on date
+  is_active boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    category_id [name: 'ix_products_category_id']
+    updated_at [name: 'ix_products_updated_at']
+  }
+
+  checks {
+    `discontinued_on IS NULL OR launched_on IS NULL OR discontinued_on >= launched_on` [name: 'ck_products_dates']
+  }
+}
+
+Table product_prices {
+  product_price_id bigint [pk, increment]
+  product_id bigint [not null]
+  country_code char(2) [not null, note: 'Sales market of this price']
+  currency_code char(3) [not null, note: 'Equals the market currency when the price was set']
+  list_price numeric(12,2) [not null, note: 'Consumer unit price incl. VAT, local currency']
+  unit_cost numeric(12,2) [not null, note: 'Landed unit cost excl. VAT, local currency']
+  valid_from timestamptz [not null]
+  valid_to timestamptz [note: 'Exclusive end. NULL means current price.']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (product_id, country_code, valid_from) [unique, name: 'uq_product_prices_product_country_from']
+    country_code [name: 'ix_product_prices_country_code']
+    updated_at [name: 'ix_product_prices_updated_at']
+  }
+
+  checks {
+    `list_price > 0` [name: 'ck_product_prices_list_price']
+    `unit_cost >= 0` [name: 'ck_product_prices_unit_cost']
+    `valid_to IS NULL OR valid_to > valid_from` [name: 'ck_product_prices_validity']
+  }
+
+  Note: '''
+Effective-dated price list per product and market.
+Validity periods of the same product and country must not overlap: EXCLUDE USING gist (product_id WITH =, country_code WITH =, tstzrange(valid_from, valid_to) WITH &&), which needs the btree_gist extension.
+Order lines copy list_price and unit_cost at purchase time, so later price changes never alter past sales.
+'''
+}
+
+Table promotions {
+  promotion_id bigint [pk, increment]
+  promotion_code varchar(30) [not null, unique, note: 'e.g. BLACKFRIDAY-2025']
+  promotion_name varchar(100) [not null]
+  discount_percent numeric(5,2) [not null]
+  category_id bigint [note: 'NULL means all categories']
+  country_code char(2) [note: 'NULL means all markets']
+  channel sales_channel [note: 'NULL means online and in store']
+  starts_at timestamptz [not null]
+  ends_at timestamptz [not null]
+  is_active boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (starts_at, ends_at) [name: 'ix_promotions_window']
+    category_id [name: 'ix_promotions_category_id']
+    updated_at [name: 'ix_promotions_updated_at']
+  }
+
+  checks {
+    `discount_percent > 0 AND discount_percent < 100` [name: 'ck_promotions_discount_percent']
+    `ends_at > starts_at` [name: 'ck_promotions_window']
+  }
+
+  Note: '''
+Seasonal percentage discounts applied per order line, at most one promotion per line.
+Before applying a promotion the order service checks that it is active, that placed_at falls inside the window, and that category, order country and channel match.
+'''
+}
+
+// =====================================================================
+// Stock locations and inventory
+// =====================================================================
+
+Table stock_locations {
+  stock_location_id bigint [pk, increment]
+  location_code varchar(20) [not null, unique, note: 'Stable business key, e.g. SE-STO-01, SE-WH-01']
+  location_name varchar(100) [not null]
+  location_type stock_location_type [not null]
+  country_code char(2) [not null]
+  address_line1 varchar(200) [not null]
+  postal_code varchar(10) [not null]
+  city varchar(100) [not null]
+  opened_on date [not null]
+  is_active boolean [not null, default: true]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (stock_location_id, location_type) [unique, name: 'uq_stock_locations_id_type', note: 'Target of the type-checked FKs from stores and warehouses']
+    country_code [name: 'ix_stock_locations_country_code']
+  }
+
+  Note: '''
+Supertype for every place that holds stock (12 stores and 4 warehouses).
+Inventory, reservations, movements, order fulfilment and return receipt reference this table with ordinary FKs. There is no polymorphic location_id plus location_type pair.
+Each store or warehouse row points to exactly one location of its own type through the composite FK on (stock_location_id, location_type).
+A location and its subtype row are inserted in the same transaction (a deferred constraint trigger can enforce that every location has its subtype row).
+'''
+}
+
+Table stores {
+  store_id bigint [pk, increment]
+  stock_location_id bigint [not null]
+  location_type stock_location_type [not null, default: 'store', note: 'Fixed discriminator used by the composite FK']
+  store_format varchar(20) [not null, default: 'standard', note: 'flagship or standard']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (stock_location_id, location_type) [unique, name: 'uq_stores_stock_location', note: 'One store per stock location (location_type is fixed)']
+    (store_id, stock_location_id) [unique, name: 'uq_stores_store_location', note: 'Target of the in-store fulfilment FK from orders']
+  }
+
+  checks {
+    `location_type = 'store'` [name: 'ck_stores_location_type']
+  }
+}
+
+Table warehouses {
+  warehouse_id bigint [pk, increment]
+  stock_location_id bigint [not null]
+  location_type stock_location_type [not null, default: 'warehouse', note: 'Fixed discriminator used by the composite FK']
+  ships_online_orders boolean [not null, default: true]
+  storage_capacity_units integer
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (stock_location_id, location_type) [unique, name: 'uq_warehouses_stock_location', note: 'One warehouse per stock location (location_type is fixed)']
+  }
+
+  checks {
+    `location_type = 'warehouse'` [name: 'ck_warehouses_location_type']
+    `storage_capacity_units IS NULL OR storage_capacity_units > 0` [name: 'ck_warehouses_capacity']
+  }
+}
+
+Table inventory_balances {
+  inventory_balance_id bigint [pk, increment]
+  stock_location_id bigint [not null]
+  product_id bigint [not null]
+  quantity_on_hand integer [not null, default: 0, note: 'Physical units = SUM(inventory_movements.quantity_change)']
+  quantity_reserved integer [not null, default: 0, note: 'Units held = SUM(quantity) of active inventory_reservations']
+  reorder_point integer [not null, default: 0, note: 'Replenishment trigger level']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (stock_location_id, product_id) [unique, name: 'uq_inventory_balances_location_product']
+    product_id [name: 'ix_inventory_balances_product_id']
+    updated_at [name: 'ix_inventory_balances_updated_at']
+  }
+
+  checks {
+    `quantity_on_hand >= 0` [name: 'ck_inventory_balances_on_hand']
+    `quantity_reserved >= 0` [name: 'ck_inventory_balances_reserved']
+    `quantity_reserved <= quantity_on_hand` [name: 'ck_inventory_balances_no_oversell']
+    `reorder_point >= 0` [name: 'ck_inventory_balances_reorder_point']
+  }
+
+  Note: '''
+Current stock position, one row per location and product, created with zero quantities before any movement or reservation.
+Available to sell = quantity_on_hand - quantity_reserved (derived, not stored).
+quantity_on_hand changes only together with an inventory_movements insert; quantity_reserved changes only together with an inventory_reservations change, in the same transaction.
+Reserve with a guarded update that also row-locks the balance: UPDATE ... SET quantity_reserved = quantity_reserved + :qty WHERE stock_location_id = :loc AND product_id = :prod AND quantity_on_hand - quantity_reserved >= :qty. Zero rows updated means insufficient stock, so concurrent orders cannot oversell.
+'''
+}
+
+Table inventory_reservations {
+  reservation_id bigint [pk, increment]
+  order_item_id bigint [not null]
+  stock_location_id bigint [not null]
+  product_id bigint [not null]
+  quantity integer [not null]
+  status reservation_status [not null, default: 'active']
+  reserved_at timestamptz [not null]
+  expires_at timestamptz [not null]
+  closed_at timestamptz [note: 'When consumed, released or expired']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    order_item_id [name: 'ix_inventory_reservations_order_item_id']
+    (stock_location_id, product_id, status) [name: 'ix_inventory_reservations_location_product_status']
+    (status, expires_at) [name: 'ix_inventory_reservations_status_expires_at', note: 'Expiry sweeper']
+    updated_at [name: 'ix_inventory_reservations_updated_at']
+  }
+
+  checks {
+    `quantity > 0` [name: 'ck_inventory_reservations_quantity']
+    `expires_at > reserved_at` [name: 'ck_inventory_reservations_expiry']
+    `(status = 'active') = (closed_at IS NULL)` [name: 'ck_inventory_reservations_closed_at']
+  }
+
+  Note: '''
+One reservation per order line at the order fulfilment location, created when the order moves to stock_reserved.
+stock_location_id must equal orders.fulfilment_location_id and product_id must equal order_items.product_id (trigger).
+At most one active reservation per order line: partial unique index on (order_item_id) WHERE status = active.
+Lifecycle: active -> consumed (fulfilment) | released (cancellation or payment failure) | expired (after expires_at). Every transition adjusts inventory_balances.quantity_reserved in the same transaction.
+'''
+}
+
+Table inventory_movements {
+  movement_id bigint [pk, increment]
+  stock_location_id bigint [not null]
+  product_id bigint [not null]
+  movement_type movement_type [not null]
+  quantity_change integer [not null, note: 'Signed: positive adds stock, negative removes stock']
+  occurred_at timestamptz [not null, note: 'Business time of the physical movement']
+  order_item_id bigint [note: 'Required for sale']
+  return_item_id bigint [note: 'Required for return_restock']
+  related_movement_id bigint [note: 'transfer_in points to its matching transfer_out']
+  external_reference varchar(64) [note: 'Supplier delivery note or stock count document']
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (stock_location_id, product_id, occurred_at) [name: 'ix_inventory_movements_location_product_time']
+    order_item_id [name: 'ix_inventory_movements_order_item_id']
+    return_item_id [name: 'ix_inventory_movements_return_item_id']
+    related_movement_id [name: 'ix_inventory_movements_related_movement_id']
+    created_at [name: 'ix_inventory_movements_created_at']
+  }
+
+  checks {
+    `quantity_change <> 0` [name: 'ck_inventory_movements_nonzero']
+    `movement_type NOT IN ('opening_balance', 'purchase_receipt', 'transfer_in', 'return_restock') OR quantity_change > 0` [name: 'ck_inventory_movements_inbound_positive']
+    `movement_type NOT IN ('transfer_out', 'sale', 'write_off') OR quantity_change < 0` [name: 'ck_inventory_movements_outbound_negative']
+    `(movement_type = 'sale') = (order_item_id IS NOT NULL)` [name: 'ck_inventory_movements_sale_ref']
+    `(movement_type = 'return_restock') = (return_item_id IS NOT NULL)` [name: 'ck_inventory_movements_restock_ref']
+    `(movement_type = 'transfer_in') = (related_movement_id IS NOT NULL)` [name: 'ck_inventory_movements_transfer_ref']
+  }
+
+  Note: '''
+Insert-only stock ledger: no UPDATE or DELETE, corrections are new stock_adjustment rows.
+SUM(quantity_change) per location and product must equal inventory_balances.quantity_on_hand.
+Reservations never create movements. Stock leaves on hand exactly once, through the sale movement written at fulfilment, which consumes the reservation in the same transaction. This prevents double counting.
+One sale movement per order line: partial unique index on (order_item_id) WHERE movement_type = sale.
+A transfer_in must reference a transfer_out of the same product at a different location with the opposite quantity (trigger).
+'''
+}
+
+// =====================================================================
+// Orders and payments
+// =====================================================================
+
+Table orders {
+  order_id bigint [pk, increment]
+  order_number varchar(30) [not null, unique, note: 'Stable business key, e.g. SE-2025-00012345']
+  customer_id bigint [note: 'Required for online orders. NULL allowed for anonymous in-store sales.']
+  channel sales_channel [not null]
+  store_id bigint [note: 'Selling store. Required for in_store, NULL for online.']
+  fulfilment_location_id bigint [not null, note: 'Stock location that reserves and issues the stock']
+  country_code char(2) [not null, note: 'Sales market: drives price list, VAT and currency']
+  currency_code char(3) [not null, note: 'Currency of every amount on this order and its child records']
+  status order_status [not null, default: 'placed']
+  cancellation_reason varchar(50) [note: 'out_of_stock, reservation_expired or customer_request']
+  items_total numeric(14,2) [not null, default: 0, note: 'SUM(order_items.line_total), incl. VAT']
+  shipping_fee numeric(12,2) [not null, default: 0]
+  order_total numeric(14,2) [not null, default: 0, note: 'items_total + shipping_fee, the amount to pay']
+  shipping_address_line1 varchar(200)
+  shipping_postal_code varchar(10)
+  shipping_city varchar(100)
+  placed_at timestamptz [not null]
+  confirmed_at timestamptz
+  fulfilled_at timestamptz [note: 'Picked and packed (online) or handed over (in store)']
+  cancelled_at timestamptz [note: 'Also set for payment_failed']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    customer_id [name: 'ix_orders_customer_id']
+    store_id [name: 'ix_orders_store_id']
+    fulfilment_location_id [name: 'ix_orders_fulfilment_location_id']
+    (status, placed_at) [name: 'ix_orders_status_placed_at']
+    placed_at [name: 'ix_orders_placed_at']
+    updated_at [name: 'ix_orders_updated_at']
+  }
+
+  checks {
+    `(channel = 'in_store') = (store_id IS NOT NULL)` [name: 'ck_orders_store_matches_channel']
+    `channel = 'in_store' OR customer_id IS NOT NULL` [name: 'ck_orders_online_customer']
+    `channel = 'in_store' OR (shipping_address_line1 IS NOT NULL AND shipping_postal_code IS NOT NULL AND shipping_city IS NOT NULL)` [name: 'ck_orders_online_address']
+    `channel = 'online' OR shipping_fee = 0` [name: 'ck_orders_in_store_no_shipping']
+    `items_total >= 0 AND shipping_fee >= 0` [name: 'ck_orders_amounts_non_negative']
+    `order_total = items_total + shipping_fee` [name: 'ck_orders_total']
+    `status NOT IN ('cancelled', 'payment_failed') OR cancelled_at IS NOT NULL` [name: 'ck_orders_cancelled_at']
+  }
+
+  Note: '''
+Lifecycle: placed -> stock_reserved -> confirmed -> fulfilled, with exits to payment_failed or cancelled. Transitions are validated by the order service or a trigger.
+Post-sale events live in their own tables: shipments (online dispatch and delivery), returns, return_items and refunds.
+In-store orders pass through the same states within seconds. fulfilled_at is the handover time and no shipment is created.
+In-store orders are fulfilled from the selling store stock location, enforced by the composite FK (store_id, fulfilment_location_id) -> stores (store_id, stock_location_id). Online orders are fulfilled from the warehouse in their country (service rule).
+Online orders are delivered within the sales country, so the shipping country is country_code.
+'''
+}
+
+Table order_items {
+  order_item_id bigint [pk, increment]
+  order_id bigint [not null]
+  line_number smallint [not null]
+  product_id bigint [not null]
+  promotion_id bigint
+  quantity integer [not null]
+  unit_price numeric(12,2) [not null, note: 'Regular unit price incl. VAT at purchase time, copied from product_prices']
+  unit_cost numeric(12,2) [not null, note: 'Unit cost excl. VAT at purchase time, copied from product_prices']
+  discount_amount numeric(12,2) [not null, default: 0, note: 'Total discount on the line']
+  line_total numeric(14,2) [not null, note: 'quantity * unit_price - discount_amount, incl. VAT']
+  vat_rate numeric(5,4) [not null]
+  vat_amount numeric(12,2) [not null, note: 'VAT contained in line_total']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (order_id, line_number) [unique, name: 'uq_order_items_order_line']
+    (order_id, product_id) [unique, name: 'uq_order_items_order_product']
+    product_id [name: 'ix_order_items_product_id']
+    promotion_id [name: 'ix_order_items_promotion_id']
+    updated_at [name: 'ix_order_items_updated_at']
+  }
+
+  checks {
+    `quantity > 0` [name: 'ck_order_items_quantity']
+    `unit_price >= 0 AND unit_cost >= 0` [name: 'ck_order_items_price_cost']
+    `discount_amount >= 0 AND discount_amount <= quantity * unit_price` [name: 'ck_order_items_discount']
+    `line_total = quantity * unit_price - discount_amount` [name: 'ck_order_items_line_total']
+    `vat_rate >= 0 AND vat_rate < 1` [name: 'ck_order_items_vat_rate']
+    `vat_amount >= 0 AND vat_amount <= line_total` [name: 'ck_order_items_vat_amount']
+  }
+
+  Note: '''
+Purchase-time snapshot: price, cost, discount and VAT are copied when the order is placed and never recalculated from product_prices or promotions.
+Amounts are in orders.currency_code.
+'''
+}
+
+Table payment_attempts {
+  payment_attempt_id bigint [pk, increment]
+  order_id bigint [not null]
+  attempt_number smallint [not null]
+  payment_method payment_method [not null]
+  payment_provider varchar(50) [not null, note: 'Synthetic payment service provider']
+  amount numeric(14,2) [not null, note: 'In orders.currency_code, equals order_total']
+  status payment_status [not null, default: 'pending']
+  failure_reason varchar(50) [note: 'card_declined, insufficient_funds, timeout']
+  provider_reference varchar(64) [unique, note: 'Provider transaction id']
+  attempted_at timestamptz [not null]
+  authorized_at timestamptz
+  captured_at timestamptz
+  failed_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (order_id, attempt_number) [unique, name: 'uq_payment_attempts_order_attempt']
+    (status, attempted_at) [name: 'ix_payment_attempts_status_attempted_at']
+    updated_at [name: 'ix_payment_attempts_updated_at']
+  }
+
+  checks {
+    `attempt_number > 0` [name: 'ck_payment_attempts_attempt_number']
+    `amount > 0` [name: 'ck_payment_attempts_amount']
+    `status <> 'failed' OR failed_at IS NOT NULL` [name: 'ck_payment_attempts_failed_at']
+    `status <> 'captured' OR captured_at IS NOT NULL` [name: 'ck_payment_attempts_captured_at']
+  }
+
+  Note: '''
+One row per payment attempt. An order may retry after a failed attempt while its reservations are active.
+At most one successful attempt per order: partial unique index on (order_id) WHERE status IN (authorized, captured).
+A captured attempt whose amount equals orders.order_total moves the order to confirmed. When the last allowed attempt fails or the reservations expire, the order becomes payment_failed and its reservations are released.
+Cash is valid only for in_store orders (service rule).
+'''
+}
+
+// =====================================================================
+// Fulfilment and after-sales
+// =====================================================================
+
+Table shipments {
+  shipment_id bigint [pk, increment]
+  order_id bigint [not null, unique]
+  carrier varchar(50) [not null]
+  tracking_number varchar(64) [unique]
+  status shipment_status [not null, default: 'label_created']
+  estimated_delivery_date date
+  dispatched_at timestamptz
+  delivered_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (status, dispatched_at) [name: 'ix_shipments_status_dispatched_at']
+    updated_at [name: 'ix_shipments_updated_at']
+  }
+
+  checks {
+    `delivered_at IS NULL OR (dispatched_at IS NOT NULL AND delivered_at >= dispatched_at)` [name: 'ck_shipments_delivery_after_dispatch']
+    `status <> 'delivered' OR delivered_at IS NOT NULL` [name: 'ck_shipments_delivered_at']
+  }
+
+  Note: '''
+One shipment per online order, created only after the order is fulfilled (trigger).
+Ships from orders.fulfilment_location_id to the order shipping address. In-store orders have no shipment.
+'''
+}
+
+Table returns {
+  return_id bigint [pk, increment]
+  return_number varchar(30) [not null, unique, note: 'Stable business key']
+  order_id bigint [not null]
+  received_location_id bigint [not null, note: 'Store or warehouse that receives the goods']
+  status return_status [not null, default: 'requested']
+  requested_at timestamptz [not null]
+  received_at timestamptz
+  closed_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    order_id [name: 'ix_returns_order_id']
+    received_location_id [name: 'ix_returns_received_location_id']
+    (status, requested_at) [name: 'ix_returns_status_requested_at']
+    updated_at [name: 'ix_returns_updated_at']
+  }
+
+  checks {
+    `received_at IS NULL OR received_at >= requested_at` [name: 'ck_returns_received_after_requested']
+  }
+
+  Note: '''
+Allowed only for fulfilled in-store orders or delivered online orders, within the return window (service rule).
+An order can have several returns, which supports partial returns.
+'''
+}
+
+Table return_items {
+  return_item_id bigint [pk, increment]
+  return_id bigint [not null]
+  order_item_id bigint [not null]
+  quantity integer [not null]
+  reason return_reason [not null]
+  item_condition item_condition [note: 'Set on inspection, NULL until received']
+  refund_amount numeric(12,2) [not null, default: 0, note: 'Amount to refund for these units, in orders.currency_code']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (return_id, order_item_id) [unique, name: 'uq_return_items_return_order_item']
+    order_item_id [name: 'ix_return_items_order_item_id']
+    updated_at [name: 'ix_return_items_updated_at']
+  }
+
+  checks {
+    `quantity > 0` [name: 'ck_return_items_quantity']
+    `refund_amount >= 0` [name: 'ck_return_items_refund_amount']
+  }
+
+  Note: '''
+order_item_id must belong to the same order as the return (trigger).
+SUM(quantity) over all non-rejected returns of an order line must not exceed order_items.quantity, and refund_amount must not exceed the pro rata share of line_total (trigger).
+Resellable items create a return_restock movement at returns.received_location_id. Damaged items are not restocked.
+'''
+}
+
+Table refunds {
+  refund_id bigint [pk, increment]
+  payment_attempt_id bigint [not null, note: 'The captured payment being refunded']
+  return_id bigint [note: 'Set when the refund settles a return. NULL for cancellations and goodwill.']
+  reason refund_reason [not null]
+  amount numeric(14,2) [not null, note: 'In orders.currency_code']
+  status refund_status [not null, default: 'pending']
+  provider_reference varchar(64) [unique]
+  requested_at timestamptz [not null]
+  processed_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    payment_attempt_id [name: 'ix_refunds_payment_attempt_id']
+    return_id [name: 'ix_refunds_return_id']
+    (status, requested_at) [name: 'ix_refunds_status_requested_at']
+    updated_at [name: 'ix_refunds_updated_at']
+  }
+
+  checks {
+    `amount > 0` [name: 'ck_refunds_amount']
+    `(reason = 'return') = (return_id IS NOT NULL)` [name: 'ck_refunds_return_ref']
+    `status = 'pending' OR processed_at IS NOT NULL` [name: 'ck_refunds_processed_at']
+  }
+
+  Note: '''
+Refunds go back to the original captured payment. Partial and multiple refunds are allowed, but the sum of succeeded refunds per payment must not exceed its captured amount (trigger).
+The referenced payment must be captured. When return_id is set, the return must belong to the same order as the payment, and amount normally equals SUM(return_items.refund_amount) for that return.
+'''
+}
+
+// =====================================================================
+// Change tracking
+// =====================================================================
+
+Table change_log {
+  change_id bigint [pk, increment]
+  table_name varchar(63) [not null]
+  record_key varchar(64) [not null, note: 'Primary key value of the changed row, as text']
+  operation change_operation [not null]
+  row_data jsonb [not null, note: 'Row image after the change, or the deleted row for delete']
+  transaction_id bigint [not null, note: 'pg_current_xact_id() of the writing transaction']
+  changed_at timestamptz [not null, default: `clock_timestamp()`]
+
+  indexes {
+    (table_name, change_id) [name: 'ix_change_log_table_change_id']
+    changed_at [name: 'ix_change_log_changed_at']
+  }
+
+  Note: '''
+Transactional change log (outbox pattern) for incremental extraction, including deletes.
+Written by one generic AFTER INSERT OR UPDATE OR DELETE row trigger on every operational table, inside the same transaction as the change: a committed change is never missed and a rolled-back change never appears.
+Extraction: read change_id > last processed change_id, re-read a short overlap window because identity values can commit out of order, de-duplicate on change_id, and keep the latest row per (table_name, record_key).
+Insert-only and not tracked itself. Rows can be purged once they are loaded.
+'''
+}
+
+// =====================================================================
+// Relationships
+// =====================================================================
+
+// Reference data
+Ref fk_countries_currency: countries.currency_code > currencies.currency_code
+Ref fk_exchange_rates_base_currency: exchange_rates.base_currency_code > currencies.currency_code
+Ref fk_exchange_rates_quote_currency: exchange_rates.quote_currency_code > currencies.currency_code
+
+// Customers, catalogue and promotions
+Ref fk_customers_country: customers.country_code > countries.country_code
+Ref fk_products_category: products.category_id > product_categories.category_id
+Ref fk_product_prices_product: product_prices.product_id > products.product_id
+Ref fk_product_prices_country: product_prices.country_code > countries.country_code
+Ref fk_product_prices_currency: product_prices.currency_code > currencies.currency_code
+Ref fk_promotions_category: promotions.category_id >? product_categories.category_id
+Ref fk_promotions_country: promotions.country_code >? countries.country_code
+
+// Stock locations (type-checked supertype and subtypes)
+Ref fk_stock_locations_country: stock_locations.country_code > countries.country_code
+Ref fk_stores_stock_location: stock_locations.(stock_location_id, location_type) - stores.(stock_location_id, location_type)
+Ref fk_warehouses_stock_location: stock_locations.(stock_location_id, location_type) - warehouses.(stock_location_id, location_type)
+
+// Inventory
+Ref fk_inventory_balances_location: inventory_balances.stock_location_id > stock_locations.stock_location_id
+Ref fk_inventory_balances_product: inventory_balances.product_id > products.product_id
+Ref fk_inventory_reservations_balance: inventory_reservations.(stock_location_id, product_id) > inventory_balances.(stock_location_id, product_id)
+Ref fk_inventory_reservations_order_item: inventory_reservations.order_item_id > order_items.order_item_id
+Ref fk_inventory_movements_balance: inventory_movements.(stock_location_id, product_id) > inventory_balances.(stock_location_id, product_id)
+Ref fk_inventory_movements_order_item: inventory_movements.order_item_id >? order_items.order_item_id
+Ref fk_inventory_movements_return_item: inventory_movements.return_item_id >? return_items.return_item_id
+Ref fk_inventory_movements_related: inventory_movements.related_movement_id >? inventory_movements.movement_id
+
+// Orders and payments
+Ref fk_orders_customer: orders.customer_id >? customers.customer_id
+Ref fk_orders_store_fulfilment: orders.(store_id, fulfilment_location_id) >? stores.(store_id, stock_location_id)
+Ref fk_orders_fulfilment_location: orders.fulfilment_location_id > stock_locations.stock_location_id
+Ref fk_orders_country: orders.country_code > countries.country_code
+Ref fk_orders_currency: orders.currency_code > currencies.currency_code
+Ref fk_order_items_order: order_items.order_id > orders.order_id
+Ref fk_order_items_product: order_items.product_id > products.product_id
+Ref fk_order_items_promotion: order_items.promotion_id >? promotions.promotion_id
+Ref fk_payment_attempts_order: payment_attempts.order_id > orders.order_id
+
+// Fulfilment and after-sales
+Ref fk_shipments_order: orders.order_id - shipments.order_id
+Ref fk_returns_order: returns.order_id > orders.order_id
+Ref fk_returns_received_location: returns.received_location_id > stock_locations.stock_location_id
+Ref fk_return_items_return: return_items.return_id > returns.return_id
+Ref fk_return_items_order_item: return_items.order_item_id > order_items.order_item_id
+Ref fk_refunds_payment_attempt: refunds.payment_attempt_id > payment_attempts.payment_attempt_id
+Ref fk_refunds_return: refunds.return_id >? returns.return_id

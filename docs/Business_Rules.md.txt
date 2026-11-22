@@ -1,0 +1,86 @@
+# NordicCart — Business Rules
+
+## 1. Order Lifecycle
+
+NordicCart operates an online and physical retail business across Sweden, Norway, Denmark, and Finland.
+
+When a customer purchases a product, the following business rules apply:
+
+1. **Order Placement:** A customer selects one or more products and places an order.
+2. **Inventory Check:** The system checks whether the products are available at the relevant store or warehouse.
+3. **Stock Reservation:** Available inventory is reserved to prevent overselling.
+4. **Payment Processing:** The customer attempts payment.
+5. **Payment Failure:** If payment fails, reserved inventory is released and the order is marked as payment failed.
+6. **Order Confirmation:** Successful payment confirms the order.
+7. **Order Fulfilment:** Products are picked, packed, and dispatched. Inventory is deducted when items are fulfilled.
+8. **Delivery:** Online orders are delivered to the customer. In-store purchases are handed over immediately.
+9. **Returns:** Customers may return eligible products within 30 days of delivery or purchase.
+10. **Refunds:** Approved returns trigger refunds, and saleable returned products are added back to available inventory after inspection.
+
+## 2. Core Rules
+
+- Every order must reference an existing customer.
+- Every order item must reference an existing product.
+- Inventory cannot fall below zero.
+- Stock reservations must not be counted as available inventory.
+- Payments cannot exceed the amount owed, except where explicitly supported by payment adjustments.
+- Refunds cannot exceed the amount actually paid for the returned items.
+- Every return must reference an existing purchase.
+- Each order, payment, shipment, and inventory movement must have a unique identifier.
+- All business events must have timestamps.
+- Transactions must use the currency of the country in which the sale occurs.
+
+## 3. Initial Implementation
+
+The first working simulation will include:
+
+- Customer orders
+- Inventory checks and reservations
+- Payment successes and failures
+- Order confirmation
+- Inventory deductions
+- Basic fulfilment
+
+Shipping, returns, refunds, promotions, and advanced business scenarios will be introduced after this initial workflow is validated.
+
+
+
+
+
+## 4. Initial Database Design
+
+NordicCart will use PostgreSQL as its primary database system.
+
+The initial operational database will contain seven tables:
+
+| Table | Purpose |
+|---|---|
+| `customers` | Stores customer profiles and registration information |
+| `products` | Stores product details, categories, prices, and costs |
+| `stores` | Stores retail store information and locations |
+| `inventory` | Tracks stock quantities and reservations by product and location |
+| `orders` | Stores customer purchases, order dates, and payment statuses |
+| `order_items` | Stores the individual products and quantities purchased in each order |
+| `payments` | Records payment attempts, successful payments, and failed payments |
+
+### Table Relationships
+
+1. One customer can place multiple orders.
+2. One order can contain multiple order items.
+3. Each order item references one product.
+4. One order can have multiple payment attempts.
+5. Each product can be stocked at multiple inventory locations.
+6. Each store belongs to one country.
+
+### Database Design Principles
+
+- Every table must have a primary key.
+- Foreign keys will enforce relationships between tables.
+- Unique constraints will prevent duplicate records.
+- Appropriate data types will be used for dates, quantities, prices, and identifiers.
+- Inventory quantities must never become negative.
+- Monetary amounts will use precise decimal data types rather than floating-point numbers.
+- Operational tables will be kept separate from analytical reporting tables.
+
+This initial design is provisional. Warehouse locations, stock movements, shipments, returns, refunds, promotions, currencies, and exchange rates will be incorporated as the database model develops.
+

@@ -1,0 +1,127 @@
+table FactOrdersMonthly
+	lineageTag: 63a945ba-1a98-5a17-85ef-7008c7d85ae9
+
+	/// Orders placed, by local placement month, any status.
+	measure 'Orders Placed' = SUM ( FactOrdersMonthly[orders] )
+		formatString: #,0
+		displayFolder: Orders
+		lineageTag: aa80ed6e-d50e-55ba-b59a-0b2038a4853a
+
+	/// Placed orders now fulfilled (placement-month basis).
+	measure 'Orders Fulfilled' = CALCULATE ( [Orders Placed], FactOrdersMonthly[status] = "fulfilled" )
+		formatString: #,0
+		displayFolder: Orders
+		lineageTag: 2703a5fb-c4b1-53ed-9bde-b40b2923c4e7
+
+	/// Placed orders cancelled.
+	measure 'Orders Cancelled' = CALCULATE ( [Orders Placed], FactOrdersMonthly[status] = "cancelled" )
+		formatString: #,0
+		displayFolder: Orders
+		lineageTag: e4eb0070-c646-58d9-ab9e-53381d90012c
+
+	/// Placed orders whose payment failed.
+	measure 'Orders Payment Failed' = CALCULATE ( [Orders Placed], FactOrdersMonthly[status] = "payment_failed" )
+		formatString: #,0
+		displayFolder: Orders
+		lineageTag: aff2b9ce-db92-5720-a6b0-fbb1bd44a519
+
+	/// Placed orders not yet in a final status (e.g. confirmed).
+	measure 'Orders In Progress' = CALCULATE ( [Orders Placed], NOT FactOrdersMonthly[status] IN { "fulfilled", "cancelled", "payment_failed" } )
+		formatString: #,0
+		displayFolder: Orders
+		lineageTag: 1065f98e-dd26-5d89-8624-0e261181c4e5
+
+	/// Fulfilled / placed.
+	measure 'Fulfilment Rate' = DIVIDE ( [Orders Fulfilled], [Orders Placed] )
+		formatString: 0.00%
+		displayFolder: Orders
+		lineageTag: e97511f6-8623-5b5b-b9da-a04fb1f96e00
+
+	/// Cancelled / placed.
+	measure 'Cancellation Rate' = DIVIDE ( [Orders Cancelled], [Orders Placed] )
+		formatString: 0.00%
+		displayFolder: Orders
+		lineageTag: 6d1ba716-b3a9-5bcc-b601-70b6ee208725
+
+	/// Payment failed / placed.
+	measure 'Payment Failure Rate' = DIVIDE ( [Orders Payment Failed], [Orders Placed] )
+		formatString: 0.00%
+		displayFolder: Orders
+		lineageTag: 61baace0-926f-53d9-9109-118367a3f26f
+
+	/// Orders placed one year earlier, over the selected months up to the last placement month.
+	measure 'Orders Placed PY' = VAR _last = EOMONTH ( CALCULATE ( MAX ( FactOrdersMonthly[month_start] ), REMOVEFILTERS () ), 0 ) VAR _dates = CALCULATETABLE ( VALUES ( DimDate[Date] ), KEEPFILTERS ( DimDate[Date] <= _last ) ) RETURN CALCULATE ( [Orders Placed], SAMEPERIODLASTYEAR ( _dates ) )
+		formatString: #,0
+		displayFolder: Orders
+		lineageTag: 1559fc2a-d1cb-5f9c-ae45-ba03599423d2
+
+	/// Year-over-year change of orders placed; the latest month is partial in both years' comparison.
+	measure 'Orders Placed YoY %' = VAR _first = CALCULATE ( MIN ( FactOrdersMonthly[month_start] ), REMOVEFILTERS () ) VAR _last = EOMONTH ( CALCULATE ( MAX ( FactOrdersMonthly[month_start] ), REMOVEFILTERS () ), 0 ) VAR _dates = CALCULATETABLE ( VALUES ( DimDate[Date] ), KEEPFILTERS ( DimDate[Date] <= _last ) ) VAR _pyStart = MINX ( SAMEPERIODLASTYEAR ( _dates ), DimDate[Date] ) VAR _py = [Orders Placed PY] RETURN IF ( _pyStart >= _first && NOT ISBLANK ( _py ), DIVIDE ( [Orders Placed] - _py, _py ) )
+		formatString: 0.0%
+		displayFolder: Orders
+		lineageTag: 1ba53671-a431-5a73-8168-c1e75267aaea
+
+	column month_local
+		dataType: string
+		lineageTag: 122059f3-bdd0-55bf-adb7-eb6798b3b4cb
+		summarizeBy: none
+		sourceColumn: month_local
+
+		annotation SummarizationSetBy = Automatic
+
+	column market
+		dataType: string
+		lineageTag: 174b5c51-297c-5b5a-9906-80a0e885f94e
+		summarizeBy: none
+		sourceColumn: market
+
+		annotation SummarizationSetBy = Automatic
+
+	column channel
+		dataType: string
+		lineageTag: 7cb7fdb1-850e-55cb-8586-df918899c68f
+		summarizeBy: none
+		sourceColumn: channel
+
+		annotation SummarizationSetBy = Automatic
+
+	column status
+		dataType: string
+		lineageTag: b16dc8c3-e076-5323-b0f9-e3cf977270ef
+		summarizeBy: none
+		sourceColumn: status
+
+		annotation SummarizationSetBy = Automatic
+
+	column orders
+		dataType: int64
+		formatString: #,0
+		isHidden
+		lineageTag: 3cbfd697-054e-5c39-a540-4640c161f904
+		summarizeBy: sum
+		sourceColumn: orders
+
+		annotation SummarizationSetBy = Automatic
+
+	column month_start
+		dataType: dateTime
+		formatString: yyyy-mm-dd
+		isHidden
+		lineageTag: a248d6ed-83ee-5041-a3e5-47e13ad3f2e3
+		summarizeBy: none
+		sourceColumn: month_start
+
+		annotation SummarizationSetBy = Automatic
+
+	partition FactOrdersMonthly = m
+		mode: import
+		source =
+			let
+			    Source = Csv.Document(File.Contents(AnalyticsFolder & "\orders_monthly.csv"), [Delimiter = ",", Columns = 5, Encoding = 65001, QuoteStyle = QuoteStyle.Csv]),
+			    Promoted = Table.PromoteHeaders(Source, [PromoteAllScalars = true]),
+			    Typed = Table.TransformColumnTypes(Promoted, {{"month_local", type text}, {"market", type text}, {"channel", type text}, {"status", type text}, {"orders", Int64.Type}}, "en-US"),
+			    Result = Table.AddColumn(Typed, "month_start", each Date.FromText([month_local] & "-01", [Format = "yyyy-MM-dd"]), type date)
+			in
+			    Result
+
+	annotation PBI_ResultType = Table

@@ -1,0 +1,121 @@
+{
+  "_note": "Consumer electronics catalogue rules (the DBML describes NordicCart as an omnichannel consumer electronics retailer). Brands are fictional on purpose. price_eur is the typical consumer price incl. VAT in EUR (min, max); a product's base price is drawn log-uniformly inside it and converted to each market. margin is the gross margin on net revenue excl. VAT (min, max); unit_cost = net price x (1 - margin). Every category is sold at the standard VAT rate in all four markets, which matches the schema (one VAT rate per country).",
+  "categories": [
+    {
+      "category_code": "SMARTPHONES", "category_name": "Smartphones", "sku_prefix": "SPH", "weight": 14,
+      "brands": ["Vexon", "Lumora", "Kirra", "Talvi"],
+      "margin": ["0.10", "0.20"],
+      "types": [
+        {"pattern": "{brand} {series} {model} {variant}", "price_eur": ["149", "1499"],
+         "parts": {"series": ["Edge", "Nova", "Pulse", "Aero", "Lumen"], "model": ["5", "6", "7", "8", "8 Pro", "8 Lite", "X"], "variant": ["128 GB", "256 GB", "512 GB"]}}
+      ]
+    },
+    {
+      "category_code": "LAPTOPS", "category_name": "Laptops", "sku_prefix": "LAP", "weight": 12,
+      "brands": ["Orbitek", "Vexon", "Halvard", "Kirra"],
+      "margin": ["0.10", "0.18"],
+      "types": [
+        {"pattern": "{brand} {series} {model} {variant}", "price_eur": ["449", "2799"],
+         "parts": {"series": ["AirBook", "Studio", "ProBook", "Flex", "Slate"], "model": ["13\"", "14\"", "15\"", "16\""], "variant": ["8 GB/256 GB", "16 GB/512 GB", "16 GB/1 TB", "32 GB/1 TB"]}}
+      ]
+    },
+    {
+      "category_code": "TABLETS", "category_name": "Tablets", "sku_prefix": "TAB", "weight": 7,
+      "brands": ["Vexon", "Lumora", "Orbitek"],
+      "margin": ["0.12", "0.22"],
+      "types": [
+        {"pattern": "{brand} {series} {model} {variant}", "price_eur": ["179", "1299"],
+         "parts": {"series": ["Tab", "Pad", "Canvas"], "model": ["8.7\"", "10.9\"", "11\"", "12.4\""], "variant": ["64 GB", "128 GB", "256 GB", "5G 128 GB"]}}
+      ]
+    },
+    {
+      "category_code": "TV_AUDIO", "category_name": "TV and Home Audio", "sku_prefix": "TVA", "weight": 10,
+      "brands": ["Skarp", "Lumora", "Brisa"],
+      "margin": ["0.15", "0.28"],
+      "types": [
+        {"pattern": "{brand} {series} {model} 4K {variant} TV", "price_eur": ["399", "3499"],
+         "parts": {"series": ["Vista", "Horizon", "Prism"], "model": ["43\"", "50\"", "55\"", "65\"", "75\""], "variant": ["LED", "QLED", "OLED"]}},
+        {"pattern": "{brand} {series} {model} Soundbar", "price_eur": ["149", "999"],
+         "parts": {"series": ["Cinema", "Arena", "Stage"], "model": ["2.1", "3.1", "5.1", "7.1.2"]}}
+      ]
+    },
+    {
+      "category_code": "HEADPHONES", "category_name": "Headphones", "sku_prefix": "HPH", "weight": 11,
+      "brands": ["Auralis", "Brisa", "Kirra", "Fjell"],
+      "margin": ["0.30", "0.45"],
+      "types": [
+        {"pattern": "{brand} {series} {model} Wireless Over-Ear", "price_eur": ["79", "499"],
+         "parts": {"series": ["Quiet", "Studio", "Voyage"], "model": ["2", "3", "4", "Pro", "Max"]}},
+        {"pattern": "{brand} {series} Buds {model}", "price_eur": ["29", "299"],
+         "parts": {"series": ["Air", "Sport", "Quiet"], "model": ["2", "3", "Pro", "Lite"]}}
+      ]
+    },
+    {
+      "category_code": "WEARABLES", "category_name": "Wearables", "sku_prefix": "WEA", "weight": 7,
+      "brands": ["Talvi", "Vexon", "Fjell"],
+      "margin": ["0.25", "0.40"],
+      "types": [
+        {"pattern": "{brand} {series} Watch {model} {variant}", "price_eur": ["149", "799"],
+         "parts": {"series": ["Active", "Trail", "Pulse"], "model": ["3", "4", "5", "Ultra"], "variant": ["41 mm", "45 mm", "47 mm"]}},
+        {"pattern": "{brand} Fit Band {model}", "price_eur": ["39", "149"],
+         "parts": {"model": ["4", "5", "6", "Pro"]}}
+      ]
+    },
+    {
+      "category_code": "CAMERAS", "category_name": "Cameras", "sku_prefix": "CAM", "weight": 5,
+      "brands": ["Kestrel", "Lumora", "Arcus"],
+      "margin": ["0.15", "0.25"],
+      "types": [
+        {"pattern": "{brand} {series} {model} Mirrorless Camera", "price_eur": ["499", "2999"],
+         "parts": {"series": ["Alpha", "Vector", "Mira"], "model": ["M10", "M20", "M50", "Z5", "Z7"]}},
+        {"pattern": "{brand} Action Cam {model}", "price_eur": ["149", "549"],
+         "parts": {"model": ["4", "5", "6", "Max"]}},
+        {"pattern": "{brand} SkyHawk {model} Drone", "price_eur": ["299", "1599"],
+         "parts": {"model": ["Mini", "Air", "Pro", "3"]}}
+      ]
+    },
+    {
+      "category_code": "GAMING", "category_name": "Gaming", "sku_prefix": "GAM", "weight": 9,
+      "brands": ["Zentro", "Orbitek", "Kestrel"],
+      "margin": ["0.12", "0.30"],
+      "types": [
+        {"pattern": "{brand} {series} Console {variant}", "price_eur": ["299", "699"],
+         "parts": {"series": ["Nexus", "Arc"], "variant": ["Digital Edition", "1 TB", "2 TB"]}},
+        {"pattern": "{brand} {series} Wireless Controller", "price_eur": ["49", "199"],
+         "parts": {"series": ["Nexus", "Arc", "Pro"]}},
+        {"pattern": "{brand} {series} Gaming Headset", "price_eur": ["39", "249"],
+         "parts": {"series": ["Raid", "Siege", "Echo"]}}
+      ]
+    },
+    {
+      "category_code": "SMART_HOME", "category_name": "Smart Home", "sku_prefix": "SMH", "weight": 8,
+      "brands": ["Hemma", "Nordvolt", "Brisa"],
+      "margin": ["0.30", "0.45"],
+      "types": [
+        {"pattern": "{brand} Smart Speaker {model}", "price_eur": ["39", "299"],
+         "parts": {"model": ["Mini", "2", "3", "Max"]}},
+        {"pattern": "{brand} Video Doorbell {model}", "price_eur": ["79", "249"],
+         "parts": {"model": ["2", "3", "Pro"]}},
+        {"pattern": "{brand} Smart Plug {variant}", "price_eur": ["15", "49"],
+         "parts": {"variant": ["1-pack", "2-pack", "4-pack"]}},
+        {"pattern": "{brand} Robot Vacuum {model}", "price_eur": ["199", "899"],
+         "parts": {"model": ["S5", "S7", "S9", "Max"]}}
+      ]
+    },
+    {
+      "category_code": "ACCESSORIES", "category_name": "Accessories", "sku_prefix": "ACC", "weight": 17,
+      "brands": ["Nordvolt", "Kabla", "Vexon", "Auralis"],
+      "margin": ["0.45", "0.65"],
+      "types": [
+        {"pattern": "{brand} USB-C Charger {variant}", "price_eur": ["15", "79"],
+         "parts": {"variant": ["20 W", "35 W", "65 W", "100 W"]}},
+        {"pattern": "{brand} USB-C Cable {variant}", "price_eur": ["9", "39"],
+         "parts": {"variant": ["1 m", "2 m", "3 m"]}},
+        {"pattern": "{brand} Power Bank {variant}", "price_eur": ["25", "99"],
+         "parts": {"variant": ["10000 mAh", "20000 mAh", "25000 mAh"]}},
+        {"pattern": "{brand} Protective Case {series} {model}", "price_eur": ["15", "59"],
+         "parts": {"series": ["Edge", "Nova", "Pulse"], "model": ["6", "7", "8"]}}
+      ]
+    }
+  ]
+}
