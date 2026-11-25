@@ -504,6 +504,10 @@ class _Sim:
             elif action == "dispatch":
                 for x in payload.lines:
                     self.pending_out[(payload.source, x.sku)] += x.quantity
+                # numbered at a review before the window start, not dispatched yet, so not in the start state (S10):
+                # the next review must continue after it
+                prefix, number = payload.reference[:10], int(payload.reference[11:17])
+                self.sequences[prefix] = max(self.sequences.get(prefix, 0), number)
             elif action == "arrive":
                 for x in payload.lines:
                     transit[f"{payload.reference}|{x.sku}"] = (payload, x)
@@ -627,8 +631,31 @@ class _Sim:
         counts = {k: self.counts[k] for k in COUNT_NAMES}
         # price rows dated before t: launch prices loaded with the master data (also of later launches) and P1 rows
         counts["product_prices"] = sum(1 for rows in self.prices.values() for p in rows if p.valid_from < t)
-        return build_snapshot(t, balances, in_transit, open_po, open_orders, self.sequences, counts,
+        return build_snapshot(t, balances, in_transit, open_po, open_orders, self._dispatched_sequences(), counts,
                               self.rates_through, prices)
+
+    def _dispatched_sequences(self) -> dict:
+        """The document sequences as the database holds them (state._SEQUENCES): transfer numbers count once dispatched.
+
+        The store review numbers its transfers at 05:30 local and dispatches them from 06:00 local, so an hourly window
+        can end in between (S10). Numbers still waiting in the queue for their dispatch are not reported; with none
+        pending (every midnight boundary) this is self.sequences unchanged.
+        """
+        pending = defaultdict(set)
+        for entry in self.queue:
+            if entry[4] == "dispatch":
+                reference = entry[5].reference
+                pending[reference[:10]].add(int(reference[11:17]))
+        sequences = dict(self.sequences)
+        for prefix, numbers in pending.items():
+            n = sequences.get(prefix, 0)
+            while n in numbers:
+                n -= 1
+            if n > 0:
+                sequences[prefix] = n
+            else:
+                sequences.pop(prefix, None)       # nothing of this prefix dispatched yet: absent, as in the database
+        return sequences
 
     # ------------------------------------------------------------------ schedule
     def schedule(self, until: datetime) -> None:

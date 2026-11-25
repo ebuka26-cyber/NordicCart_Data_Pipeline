@@ -47,7 +47,7 @@ import psycopg
 import pytest
 from psycopg import sql
 
-from nordiccart.activity.engine import DAY, EngineContext, plan_fingerprint, simulate
+from nordiccart.activity.engine import DAY, EngineContext, decode, plan_fingerprint, simulate
 from nordiccart.activity.run import ACTIVITY_LOCK, plan_window, run_window
 from nordiccart.activity.state import state_as_of, state_hash
 from nordiccart.settings import load_settings
@@ -271,6 +271,42 @@ def test_plan_is_deterministic(contexts, origin_state):
     a, b = simulate(ctx, origin_state, end), simulate(ctx, origin_state, end)
     assert plan_fingerprint(a.units) == plan_fingerprint(b.units)
     assert len(a.units) > 300
+
+
+def test_transfers_numbered_before_dispatch_across_an_hourly_window_end(contexts, origin_state):
+    """S10 regression: the store review numbers its transfers at 05:30 local, dispatch follows from 06:00 local.
+
+    At every hour the snapshot's transfer sequences are the highest number already dispatched (what state._SEQUENCES
+    reads from the database), also at an hour that ends between a review and its dispatches; a replay split there
+    and continued from that snapshot and its carry equals the uninterrupted replay (no transfer number reused).
+    """
+    from datetime import timedelta
+
+    ctx = contexts["stress"]
+    end = ctx.origin + 3 * DAY
+    hours = [ctx.origin + timedelta(hours=h) for h in range(1, 72)]
+    full = simulate(ctx, origin_state, end, hours + [end])
+    transfers = [u.payload for u in full.units if u.kind == "T1"]
+    assert transfers, "the stress volume replenishes stores every working day"
+    splits = []
+    before = {k: v for k, v in origin_state["sequences"].items() if k.startswith("TR-")}   # dispatched before the origin
+    for t in hours:
+        dispatched = dict(before)
+        for x in transfers:
+            if x.dispatched_at < t:
+                dispatched[x.reference[:10]] = max(dispatched.get(x.reference[:10], 0), int(x.reference[11:17]))
+        assert {k: v for k, v in full.snapshots[t]["sequences"].items() if k.startswith("TR-")} == dispatched, t
+        if any(x.requested_at < t <= x.dispatched_at for x in transfers):
+            splits.append(t)
+    assert splits, "some hour ends between a store review and its dispatches"
+    split = splits[0]
+    first = simulate(ctx, origin_state, split, [split])
+    assert any(decode(e)[3] == "dispatch" for e in first.carry["queue"]), "the carry holds numbered, undispatched transfers"
+    rest = simulate(ctx, first.snapshots[split], end, [end], carry=first.carry)
+    assert plan_fingerprint(rest.units) == plan_fingerprint(full.window(split, end))
+    assert state_hash(rest.snapshots[end]) == state_hash(full.snapshots[end])
+    references = [u.payload.reference for u in first.units + rest.units if u.kind == "T1"]
+    assert len(references) == len(set(references)) == len(transfers)
 
 
 @pytest.mark.parametrize("volume", ["representative", "stress"])
